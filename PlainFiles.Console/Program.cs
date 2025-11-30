@@ -1,190 +1,401 @@
 ﻿using PlainFiles.Core;
 
-Console.Write("Digite el nombre de la lista (por defecto 'people'): ");
-var listName = Console.ReadLine();
-if (string.IsNullOrEmpty(listName))
+Console.Title = "Sistema de Gestión – PlainFiles";
+
+// ===============================================
+//   RUTAS DE ARCHIVOS
+// ===============================================
+
+string basePath = AppDomain.CurrentDomain.BaseDirectory;
+string peopleFile = Path.Combine(basePath, "people.txt");
+string usersFile = Path.Combine(basePath, "Users.txt");
+string logFile = Path.Combine(basePath, "log.txt");
+
+// ===============================================
+//   SERVICIOS PRINCIPALES
+// ===============================================
+
+var userService = new UserService(usersFile);
+var personService = new PersonService(peopleFile);
+var logger = new FileLogger(logFile);
+
+// Cargar usuarios y personas desde archivo
+userService.Load();
+personService.Load();
+
+// ===============================================
+//   LOGIN (3 intentos con bloqueo)
+// ===============================================
+
+User? currentUser = null;
+int attempts = 3;
+
+while (attempts > 0 && currentUser == null)
 {
-    listName = "people";
+    Console.Clear();
+    Console.WriteLine("=== LOGIN ===");
+    Console.Write("Usuario: ");
+    string username = Console.ReadLine() ?? string.Empty;
+
+    Console.Write("Contraseña: ");
+    string password = Console.ReadLine() ?? string.Empty;
+
+    var user = userService.Authenticate(username, password);
+    if (user != null)
+    {
+        currentUser = user;
+        logger.Log(username, "LOGIN", "OK");
+        break;
+    }
+
+    // Falló el login
+    attempts--;
+
+    if (attempts > 0)
+    {
+        logger.Log(username, "LOGIN", "FAILED");
+        Console.WriteLine($"Credenciales incorrectas. Intentos restantes: {attempts}");
+    }
+    else
+    {
+        // Se agotaron los intentos: bloqueamos al usuario
+        userService.BlockUser(username);
+        logger.Log(username, "LOGIN", "FAILED_3_TIMES_USER_BLOCKED");
+        Console.WriteLine("Usuario bloqueado por intentos fallidos.");
+    }
+
+    Thread.Sleep(1500);
 }
 
-var helper = new NugetCsvHelper();
-var people = helper.Read($"{listName}.csv").ToList();
-foreach (var person in people)
+if (currentUser == null)
 {
-    Console.WriteLine($"ID: {person.Id}, Nombre: {person.Name}, Edad: {person.Age}");
+    Console.WriteLine("Acceso denegado. Contacte al administrador para desbloqueo.");
+    return;
 }
 
-//var manualCsv = new ManualCsvHelper();
-//var people = manualCsv.ReadCsv($"{listName}.csv");
-//var option = string.Empty;
+// ===============================================
+//   MENÚ PRINCIPAL
+// ===============================================
 
-//do
-//{
-//    option = MyMenu();
-//    Console.WriteLine();
-//    Console.WriteLine();
-//    switch (option)
-//    {
-//        case "1":
-//            AddPerson();
-//            break;
+string option = "";
+while (option != "0")
+{
+    Console.Clear();
+    Console.WriteLine("====================================");
+    Console.WriteLine("1. Mostrar personas");
+    Console.WriteLine("2. Agregar persona");
+    Console.WriteLine("3. Editar persona");
+    Console.WriteLine("4. Borrar persona");
+    Console.WriteLine("5. Guardar cambios");
+    Console.WriteLine("6. Informe por ciudad");
+    Console.WriteLine("0. Salir");
+    Console.WriteLine("====================================");
+    Console.Write("Seleccione una opción: ");
+    option = Console.ReadLine() ?? string.Empty;
 
-//        case "2":
-//            ListPeople();
-//            break;
+    Console.Clear();
 
-//        case "3":
-//            SaveFile(people, listName);
-//            Console.WriteLine("Archivo guardado.");
-//            break;
+    switch (option)
+    {
+        case "1":
+            ShowPeople();
+            break;
 
-//        case "4":
-//            DeletePerson();
-//            break;
+        case "2":
+            AddPerson();
+            break;
 
-//        case "5":
-//            SortData();
-//            break;
+        case "3":
+            EditPerson();
+            break;
 
-//        case "0":
-//            Console.WriteLine("Saliendo...");
-//            break;
+        case "4":
+            DeletePerson();
+            break;
 
-//        default:
-//            Console.WriteLine("Opción no válida.");
-//            break;
-//    }
-//} while (option != "0");
+        case "5":
+            personService.Save();
+            userService.Save();
+            logger.Log(currentUser!.Username, "SAVE", "OK");
+            Console.WriteLine("Cambios guardados correctamente.");
+            break;
 
-//void SortData()
-//{
-//    int order;
-//    do
-//    {
-//        Console.Write("Por cual campo desea ordenar 0. Nombre, 1. Apellido, 2. Edad? ");
-//        var orderString = Console.ReadLine();
-//        int.TryParse(orderString, out order);
-//        if (order < 0 || order > 2)
-//        {
-//            Console.WriteLine("Orden no válido. Intente de nuevo.");
-//        }
-//    } while (order < 0 || order > 2);
+        case "6":
+            ReportByCity();
+            break;
 
-//    int type;
-//    do
-//    {
-//        Console.Write("Desea ordenar 0. Ascendente, 1. Descendente? ");
-//        var typeString = Console.ReadLine();
-//        int.TryParse(typeString, out type);
-//        if (type < 0 || type > 1)
-//        {
-//            Console.WriteLine("Orden no válido. Intente de nuevo.");
-//        }
-//    } while (type < 0 || type > 1);
+        case "0":
+            Console.WriteLine("Saliendo...");
+            break;
 
-//    people.Sort((a, b) =>
-//    {
-//        int cmp;
-//        if (order == 2) // Edad: comparar como número
-//        {
-//            bool parsedA = int.TryParse(a[2], out var ageA);
-//            bool parsedB = int.TryParse(b[2], out var ageB);
+        default:
+            Console.WriteLine("Opción no válida.");
+            break;
+    }
 
-//            // Si no se puede parsear, tratamos como -infinito para que queden al inicio
-//            if (!parsedA) ageA = int.MinValue;
-//            if (!parsedB) ageB = int.MinValue;
+    Console.WriteLine("\nPresione ENTER para continuar...");
+    Console.ReadLine();
+}
 
-//            cmp = ageA.CompareTo(ageB);
-//        }
-//        else // Nombre o Apellido: comparación de texto, ignorando mayúsculas/minúsculas
-//        {
-//            cmp = string.Compare(a[order], b[order], StringComparison.OrdinalIgnoreCase);
-//        }
+// ===============================================
+//   MÉTODOS DEL MENÚ
+// ===============================================
 
-//        return type == 0 ? cmp : -cmp; // 0 = ascendente, 1 = descendente
-//    });
+void ShowPeople()
+{
+    Console.WriteLine("=== LISTADO DE PERSONAS ===\n");
 
-//    Console.WriteLine("Datos ordenados.");
-//}
+    var people = personService.GetAll();
+    if (people.Count == 0)
+    {
+        Console.WriteLine("No hay personas registradas.");
+        return;
+    }
 
-//void ListPeople()
-//{
-//    Console.WriteLine("Lista de personas:");
-//    Console.WriteLine($"Nombres|Apellidos|Edad");
-//    foreach (var person in people)
-//    {
-//        Console.WriteLine($"{person[0]}|{person[1]}|{person[2]}");
-//    }
-//}
+    foreach (var p in people)
+    {
+        Console.WriteLine($"ID: {p.Id}");
+        Console.WriteLine($"Nombre: {p.FirstName} {p.LastName}");
+        Console.WriteLine($"Teléfono: {p.Phone}");
+        Console.WriteLine($"Ciudad: {p.City}");
+        Console.WriteLine($"Saldo: {p.Balance:C2}");
+        Console.WriteLine("-----------------------------------");
+    }
+}
 
-//void AddPerson()
-//{
-//    Console.Write("Digite el nombre: ");
-//    var name = Console.ReadLine();
-//    Console.Write("Digite el apellido: ");
-//    var lastName = Console.ReadLine();
-//    Console.Write("Digite la edad: ");
-//    var age = Console.ReadLine();
-//    people.Add([name ?? string.Empty, lastName ?? string.Empty, age ?? string.Empty]);
-//}
+void AddPerson()
+{
+    Console.WriteLine("=== AGREGAR PERSONA ===");
 
-//void DeletePerson()
-//{
-//    Console.Write("Digite el nombre: ");
-//    var nameToDelete = Console.ReadLine();
-//    var peopleToDelete = people
-//        .Where(p => p[0].Equals(nameToDelete, StringComparison.OrdinalIgnoreCase))
-//        .ToList();
+    // ID numérico
+    int id;
+    while (true)
+    {
+        Console.Write("ID (numérico y positivo): ");
+        var idText = Console.ReadLine();
 
-//    if (peopleToDelete.Count == 0)
-//    {
-//        Console.WriteLine("No se encontraron personas con ese nombre.");
-//        return;
-//    }
+        if (!int.TryParse(idText, out id))
+        {
+            Console.WriteLine("El ID debe ser un número entero.");
+            continue;
+        }
 
-//    for (int i = 0; i < peopleToDelete.Count; i++)
-//    {
-//        Console.WriteLine($"ID: {i} - Nombres: {peopleToDelete[i][0]} {peopleToDelete[i][1]}, Edad: {peopleToDelete[i][2]}");
-//    }
+        if (id <= 0)
+        {
+            Console.WriteLine("El ID debe ser mayor que cero.");
+            continue;
+        }
 
-//    int id;
-//    do
-//    {
-//        Console.Write("Digite el ID del elemento que desea borrar, o -1 para cancelar? ");
-//        var idString = Console.ReadLine();
-//        int.TryParse(idString, out id);
-//        if (id < -1 || id > peopleToDelete.Count)
-//        {
-//            Console.WriteLine("ID no válido. Intente de nuevo.");
-//        }
-//    } while (id < -1 || id > peopleToDelete.Count);
+        // Si llega aquí, el ID es numérico y > 0
+        break;
+    }
 
-//    if (id == -1)
-//    {
-//        Console.WriteLine("Operación cancelada.");
-//        return;
-//    }
+    Console.Write("Nombre: ");
+    string firstName = Console.ReadLine() ?? string.Empty;
 
-//    var personToRemove = peopleToDelete[id];
-//    people.Remove(personToRemove);
-//}
+    Console.Write("Apellido: ");
+    string lastName = Console.ReadLine() ?? string.Empty;
 
-//string MyMenu()
-//{
-//    Console.WriteLine();
-//    Console.WriteLine();
-//    Console.WriteLine("1. Adicionar.");
-//    Console.WriteLine("2. Mostrar.");
-//    Console.WriteLine("3. Grabar.");
-//    Console.WriteLine("4. Eliminar.");
-//    Console.WriteLine("5. Ordenar.");
-//    Console.WriteLine("0. Salir.");
-//    Console.Write("Seleccione una opción: ");
-//    return Console.ReadLine() ?? string.Empty;
-//}
-//SaveFile(people, listName);
+    Console.Write("Teléfono: ");
+    string phone = Console.ReadLine() ?? string.Empty;
 
-//void SaveFile(List<string[]> people, string? listName)
-//{
-//    manualCsv.WriteCsv($"{listName}.csv", people);
-//}
+    Console.Write("Ciudad: ");
+    string city = Console.ReadLine() ?? string.Empty;
+
+    Console.Write("Saldo: ");
+    var balanceText = Console.ReadLine();
+    if (!decimal.TryParse(balanceText, out decimal balance))
+    {
+        Console.WriteLine("El saldo debe ser un número válido.");
+        return;
+    }
+
+    var person = new Person
+    {
+        Id = id,
+        FirstName = firstName,
+        LastName = lastName,
+        Phone = phone,
+        City = city,
+        Balance = balance
+    };
+
+    if (personService.TryAdd(person, out string errorMessage))
+    {
+        logger.Log(currentUser!.Username, "ADD_PERSON", $"ID={id}");
+        Console.WriteLine("Persona agregada correctamente.");
+    }
+    else
+    {
+        Console.WriteLine($"No se pudo agregar la persona: {errorMessage}");
+    }
+}
+
+void EditPerson()
+{
+    Console.WriteLine("=== EDITAR PERSONA ===");
+    Console.Write("Ingrese el ID de la persona que desea editar: ");
+    var idText = Console.ReadLine();
+
+    if (!int.TryParse(idText, out int id))
+    {
+        Console.WriteLine("El ID debe ser un número entero.");
+        return;
+    }
+
+    var person = personService.GetById(id);
+    if (person == null)
+    {
+        Console.WriteLine($"No se encontró ninguna persona con ID {id}.");
+        return;
+    }
+
+    Console.WriteLine();
+    Console.WriteLine($"Editando a: {person.FirstName} {person.LastName}");
+    Console.WriteLine("Si desea conservar el valor actual, deje el campo vacío y presione ENTER.\n");
+
+    // Nombre
+    Console.Write($"Nuevo nombre ({person.FirstName}): ");
+    var input = Console.ReadLine();
+    if (!string.IsNullOrWhiteSpace(input))
+    {
+        person.FirstName = input;
+    }
+
+    // Apellido
+    Console.Write($"Nuevo apellido ({person.LastName}): ");
+    input = Console.ReadLine();
+    if (!string.IsNullOrWhiteSpace(input))
+    {
+        person.LastName = input;
+    }
+
+    // Teléfono
+    Console.Write($"Nuevo teléfono ({person.Phone}): ");
+    input = Console.ReadLine();
+    if (!string.IsNullOrWhiteSpace(input))
+    {
+        person.Phone = input;
+    }
+
+    // Ciudad
+    Console.Write($"Nueva ciudad ({person.City}): ");
+    input = Console.ReadLine();
+    if (!string.IsNullOrWhiteSpace(input))
+    {
+        person.City = input;
+    }
+
+    // Saldo
+    Console.Write($"Nuevo saldo ({person.Balance}): ");
+    input = Console.ReadLine();
+    if (!string.IsNullOrWhiteSpace(input))
+    {
+        if (decimal.TryParse(input, out var newBalance))
+        {
+            person.Balance = newBalance;
+        }
+        else
+        {
+            Console.WriteLine("El saldo ingresado no es válido. Se conservará el saldo anterior.");
+        }
+    }
+
+    // Validaciones finales
+    if (personService.TryUpdate(person, out string errorMessage))
+    {
+        logger.Log(currentUser!.Username, "EDIT_PERSON", $"ID={id}");
+        Console.WriteLine("Persona actualizada correctamente.");
+    }
+    else
+    {
+        Console.WriteLine($"No se pudo actualizar la persona: {errorMessage}");
+    }
+}
+
+void DeletePerson()
+{
+    Console.WriteLine("=== BORRAR PERSONA ===");
+    Console.Write("Ingrese el ID de la persona que desea borrar: ");
+    var idText = Console.ReadLine();
+
+    if (!int.TryParse(idText, out int id))
+    {
+        Console.WriteLine("El ID debe ser un número entero.");
+        return;
+    }
+
+    var person = personService.GetById(id);
+    if (person == null)
+    {
+        Console.WriteLine($"No se encontró ninguna persona con ID {id}.");
+        return;
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("Se encontraron los siguientes datos:");
+    Console.WriteLine($"ID: {person.Id}");
+    Console.WriteLine($"Nombre: {person.FirstName} {person.LastName}");
+    Console.WriteLine($"Teléfono: {person.Phone}");
+    Console.WriteLine($"Ciudad: {person.City}");
+    Console.WriteLine($"Saldo: {person.Balance:C2}");
+    Console.WriteLine();
+
+    Console.Write("¿Está seguro de que desea eliminar esta persona? (S/N): ");
+    var confirm = (Console.ReadLine() ?? string.Empty).Trim().ToUpperInvariant();
+
+    if (confirm == "S")
+    {
+        personService.Delete(id);
+        logger.Log(currentUser!.Username, "DELETE_PERSON", $"ID={id}");
+        Console.WriteLine("Persona eliminada correctamente.");
+    }
+    else
+    {
+        Console.WriteLine("Operación cancelada. No se realizaron cambios.");
+    }
+}
+
+void ReportByCity()
+{
+    Console.WriteLine("=== INFORME POR CIUDAD ===\n");
+
+    var people = personService.GetAll();
+    if (people.Count == 0)
+    {
+        Console.WriteLine("No hay personas registradas.");
+        return;
+    }
+
+    var groups = personService.GetPeopleGroupedByCity();
+    decimal grandTotal = 0m;
+
+    foreach (var cityGroup in groups)
+    {
+        Console.WriteLine($"Ciudad: {cityGroup.Key}");
+        Console.WriteLine("ID   Nombre          Apellido        Saldo");
+
+        decimal cityTotal = 0m;
+
+        foreach (var p in cityGroup)
+        {
+            Console.WriteLine("{0,-4} {1,-14} {2,-14} {3,10:C2}",
+                p.Id,
+                p.FirstName,
+                p.LastName,
+                p.Balance);
+
+            cityTotal += p.Balance;
+        }
+
+        Console.WriteLine("=====");
+        Console.WriteLine($"Total {cityGroup.Key}: {cityTotal:C2}\n");
+
+        grandTotal += cityTotal;
+    }
+
+    Console.WriteLine("=====");
+    Console.WriteLine($"Total general: {grandTotal:C2}");
+
+    logger.Log(currentUser!.Username, "REPORT_BY_CITY", $"TOTAL={grandTotal}");
+}
