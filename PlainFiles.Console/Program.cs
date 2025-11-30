@@ -2,30 +2,17 @@
 
 Console.Title = "Sistema de Gestión – PlainFiles";
 
-// ===============================================
-//   RUTAS DE ARCHIVOS
-// ===============================================
-
 string basePath = AppDomain.CurrentDomain.BaseDirectory;
 string peopleFile = Path.Combine(basePath, "people.txt");
 string usersFile = Path.Combine(basePath, "Users.txt");
 string logFile = Path.Combine(basePath, "log.txt");
 
-// ===============================================
-//   SERVICIOS PRINCIPALES
-// ===============================================
-
 var userService = new UserService(usersFile);
 var personService = new PersonService(peopleFile);
 var logger = new FileLogger(logFile);
 
-// Cargar usuarios y personas desde archivo
 userService.Load();
 personService.Load();
-
-// ===============================================
-//   LOGIN (3 intentos con bloqueo)
-// ===============================================
 
 User? currentUser = null;
 int attempts = 3;
@@ -48,7 +35,6 @@ while (attempts > 0 && currentUser == null)
         break;
     }
 
-    // Falló el login
     attempts--;
 
     if (attempts > 0)
@@ -58,7 +44,6 @@ while (attempts > 0 && currentUser == null)
     }
     else
     {
-        // Se agotaron los intentos: bloqueamos al usuario
         userService.BlockUser(username);
         logger.Log(username, "LOGIN", "FAILED_3_TIMES_USER_BLOCKED");
         Console.WriteLine("Usuario bloqueado por intentos fallidos.");
@@ -72,10 +57,6 @@ if (currentUser == null)
     Console.WriteLine("Acceso denegado. Contacte al administrador para desbloqueo.");
     return;
 }
-
-// ===============================================
-//   MENÚ PRINCIPAL
-// ===============================================
 
 string option = "";
 while (option != "0")
@@ -137,10 +118,6 @@ while (option != "0")
     Console.ReadLine();
 }
 
-// ===============================================
-//   MÉTODOS DEL MENÚ
-// ===============================================
-
 void ShowPeople()
 {
     Console.WriteLine("=== LISTADO DE PERSONAS ===\n");
@@ -167,7 +144,6 @@ void AddPerson()
 {
     Console.WriteLine("=== AGREGAR PERSONA ===");
 
-    // ID numérico
     int id;
     while (true)
     {
@@ -186,7 +162,6 @@ void AddPerson()
             continue;
         }
 
-        // Si llega aquí, el ID es numérico y > 0
         break;
     }
 
@@ -254,7 +229,6 @@ void EditPerson()
     Console.WriteLine($"Editando a: {person.FirstName} {person.LastName}");
     Console.WriteLine("Si desea conservar el valor actual, deje el campo vacío y presione ENTER.\n");
 
-    // Nombre
     Console.Write($"Nuevo nombre ({person.FirstName}): ");
     var input = Console.ReadLine();
     if (!string.IsNullOrWhiteSpace(input))
@@ -262,7 +236,6 @@ void EditPerson()
         person.FirstName = input;
     }
 
-    // Apellido
     Console.Write($"Nuevo apellido ({person.LastName}): ");
     input = Console.ReadLine();
     if (!string.IsNullOrWhiteSpace(input))
@@ -270,7 +243,6 @@ void EditPerson()
         person.LastName = input;
     }
 
-    // Teléfono
     Console.Write($"Nuevo teléfono ({person.Phone}): ");
     input = Console.ReadLine();
     if (!string.IsNullOrWhiteSpace(input))
@@ -278,7 +250,6 @@ void EditPerson()
         person.Phone = input;
     }
 
-    // Ciudad
     Console.Write($"Nueva ciudad ({person.City}): ");
     input = Console.ReadLine();
     if (!string.IsNullOrWhiteSpace(input))
@@ -286,7 +257,6 @@ void EditPerson()
         person.City = input;
     }
 
-    // Saldo
     Console.Write($"Nuevo saldo ({person.Balance}): ");
     input = Console.ReadLine();
     if (!string.IsNullOrWhiteSpace(input))
@@ -301,7 +271,6 @@ void EditPerson()
         }
     }
 
-    // Validaciones finales
     if (personService.TryUpdate(person, out string errorMessage))
     {
         logger.Log(currentUser!.Username, "EDIT_PERSON", $"ID={id}");
